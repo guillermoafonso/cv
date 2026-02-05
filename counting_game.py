@@ -2,129 +2,70 @@
 """
 Symbol Counting & Spelling Game for Raspberry Pi
 Two game modes: count symbols or spell words from pictures.
+Uses Pygame to display images for the spelling game.
 """
 
 import random
 import os
+import sys
+
+# Check if pygame is available for the spelling game
+try:
+    import pygame
+    PYGAME_AVAILABLE = True
+except ImportError:
+    PYGAME_AVAILABLE = False
 
 # Symbols to use for the counting game
 SYMBOLS = ['★', '●', '♦', '♠', '♥', '▲', '■', '○', '◆', '☆']
 
-# ASCII art pictures for spelling game
-PICTURES = {
-    'DOG': """
-        / \\__
-       (    @\\___
-       /         O
-      /   (_____/
-     /_____/   U
-    """,
-    'CAT': """
-       /\\_/\\
-      ( o.o )
-       > ^ <
-      /|   |\\
-     (_|   |_)
-    """,
-    'CAR': """
-        ______
-       /|_||_\\`.__
-      (   _    _ _\\
-      =`-(_)--(_)-'
-    """,
-    'TREE': """
-          /\\
-         /  \\
-        /    \\
-       /______\\
-          ||
-          ||
-    """,
-    'FOOT': """
-       _____
-      /     \\
-     |       |
-     |       |
-      \\_____/
-       |||||
-    """,
-    'HAND': """
-          _
-       __|_|__
-      |  |_|  |
-      |   _   |
-       \\ | | /
-        \\   /
-         |_|
-    """,
-    'ARM': """
-      ____
-     /    \\___
-    |         \\___
-     \\____        \\
-          \\______/
-    """,
-    'HEAD': """
-        _____
-       /     \\
-      |  o o  |
-      |   >   |
-      |  \\_/  |
-       \\_____/
-    """,
-    'SUN': """
-        \\   |   /
-         \\  |  /
-       ---[===]---
-         /  |  \\
-        /   |   \\
-    """,
-    'MOON': """
-          ___
-        _/   \\
-       /      |
-      |       |
-       \\_    /
-         \\__/
-    """,
-    'STAR': """
-           *
-          /|\\
-         / | \\
-        *--+--*
-         \\ | /
-          \\|/
-           *
-    """,
-    'MILK': """
-        _____
-       |     |
-       |MILK |
-       |     |
-       |_____|
-    """,
-    'BED': """
-        _________
-       |  ___    |
-       | |   |   |
-       |_|___|___|
-       |_________|
-    """,
-    'HOUSE': """
-           /\\
-          /  \\
-         /    \\
-        /______\\
-        |  __  |
-        | |  | |
-        |_|__|_|
-    """,
-}
+# Words for the spelling game (images should be in 'images' folder)
+SPELLING_WORDS = ['DOG', 'CAR', 'CAT', 'TREE', 'FOOT', 'HAND', 'ARM', 'HEAD',
+                  'SUN', 'MOON', 'STAR', 'MILK', 'BED', 'HOUSE']
 
 
 def clear_screen():
     """Clear the terminal screen."""
     os.system('clear' if os.name == 'posix' else 'cls')
+
+
+def get_script_dir():
+    """Get the directory where this script is located."""
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def get_images_dir():
+    """Get the path to the images directory."""
+    return os.path.join(get_script_dir(), 'images')
+
+
+def check_images():
+    """Check which images are available and return list of available words."""
+    images_dir = get_images_dir()
+    available = []
+
+    if not os.path.exists(images_dir):
+        return available
+
+    for word in SPELLING_WORDS:
+        # Check for common image formats
+        for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+            image_path = os.path.join(images_dir, word.lower() + ext)
+            if os.path.exists(image_path):
+                available.append(word)
+                break
+
+    return available
+
+
+def get_image_path(word):
+    """Get the full path to an image for a word."""
+    images_dir = get_images_dir()
+    for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
+        image_path = os.path.join(images_dir, word.lower() + ext)
+        if os.path.exists(image_path):
+            return image_path
+    return None
 
 
 def display_symbols(count, symbol):
@@ -176,35 +117,90 @@ def play_counting_round(round_num):
         return False
 
 
-def display_picture(word):
-    """Display the ASCII art picture for a word."""
-    print('┌' + '─' * 30 + '┐')
-    for line in PICTURES[word].split('\n'):
-        if line:
-            # Pad the line to fit in the box
-            padded = line[:28].ljust(28)
-            print('│ ' + padded + ' │')
-    print('└' + '─' * 30 + '┘')
+def show_image_pygame(word):
+    """Display an image using Pygame. Returns when user closes window or presses a key."""
+    image_path = get_image_path(word)
+    if not image_path:
+        return False
+
+    pygame.init()
+
+    # Load and scale image
+    try:
+        image = pygame.image.load(image_path)
+    except pygame.error as e:
+        print(f"Error loading image: {e}")
+        pygame.quit()
+        return False
+
+    # Scale image to fit nicely on screen (max 500x500 while keeping aspect ratio)
+    max_size = 500
+    img_width, img_height = image.get_size()
+    scale = min(max_size / img_width, max_size / img_height)
+    new_width = int(img_width * scale)
+    new_height = int(img_height * scale)
+    image = pygame.transform.scale(image, (new_width, new_height))
+
+    # Create window
+    window_width = new_width + 40
+    window_height = new_height + 80
+    screen = pygame.display.set_mode((window_width, window_height))
+    pygame.display.set_caption("What is this? (Close window when ready)")
+
+    # Colors
+    WHITE = (255, 255, 255)
+    BLACK = (0, 0, 0)
+
+    # Font for instructions
+    font = pygame.font.Font(None, 28)
+    text = font.render("Close window or press any key when ready to answer", True, BLACK)
+    text_rect = text.get_rect(center=(window_width // 2, window_height - 30))
+
+    # Center image
+    image_rect = image.get_rect(center=(window_width // 2, (window_height - 50) // 2))
+
+    # Display
+    screen.fill(WHITE)
+    screen.blit(image, image_rect)
+    screen.blit(text, text_rect)
+    pygame.display.flip()
+
+    # Wait for user to close window or press key
+    waiting = True
+    while waiting:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                waiting = False
+            elif event.type == pygame.KEYDOWN:
+                waiting = False
+
+    pygame.quit()
+    return True
 
 
-def play_spelling_round(round_num, target_correct):
+def play_spelling_round(round_num, target_correct, available_words):
     """Play a single round of the spelling game."""
     clear_screen()
     print(f"\n═══ Round {round_num} of {target_correct} ═══\n")
 
-    word = random.choice(list(PICTURES.keys()))
+    word = random.choice(available_words)
 
-    print("What is this? Spell the word:\n")
-    display_picture(word)
+    print("Look at the picture window and spell what you see!\n")
 
-    answer = input("\nYour answer: ").strip().upper()
+    # Show image in Pygame window
+    if not show_image_pygame(word):
+        print("Error: Could not display image.")
+        return False, word
+
+    # Get answer
+    answer = input("\nWhat was it? Type your answer: ").strip().upper()
 
     if answer == word:
         print(f"\n✓ Correct! It's a {word}!")
-        return True
+        return True, word
     else:
         print(f"\n✗ Not quite. It was a {word}.")
-        return False
+        return False, word
 
 
 def counting_game():
@@ -247,6 +243,25 @@ def counting_game():
 
 def spelling_game():
     """Run the spelling game - need 3 correct to finish."""
+    if not PYGAME_AVAILABLE:
+        print("\n❌ Pygame is not installed!")
+        print("Install it with: sudo apt install python3-pygame")
+        print("Or: pip3 install pygame")
+        input("\nPress Enter to return to menu...")
+        return
+
+    available_words = check_images()
+
+    if len(available_words) < 3:
+        print("\n❌ Not enough images found!")
+        print(f"Found {len(available_words)} images, need at least 3.")
+        print(f"\nPlease run: python3 download_images.py")
+        print("Or manually add images to the 'images' folder.")
+        print(f"\nImages should be named: dog.png, cat.png, etc.")
+        print(f"Supported formats: PNG, JPG, GIF, BMP")
+        input("\nPress Enter to return to menu...")
+        return
+
     clear_screen()
     print("╔════════════════════════════════════════╗")
     print("║        SPELLING GAME                   ║")
@@ -254,16 +269,27 @@ def spelling_game():
     print("║  Look at the picture and spell the    ║")
     print("║  word! Get 3 correct to win!          ║")
     print("╚════════════════════════════════════════╝")
+    print(f"\n{len(available_words)} words available: {', '.join(available_words)}")
     print("\nPress Enter to start...")
     input()
 
     correct = 0
     target = 3
     round_num = 0
+    used_words = []
 
     while correct < target:
         round_num += 1
-        if play_spelling_round(correct + 1, target):
+
+        # Filter out recently used words if possible
+        word_pool = [w for w in available_words if w not in used_words[-3:]]
+        if not word_pool:
+            word_pool = available_words
+
+        success, word = play_spelling_round(correct + 1, target, word_pool)
+        used_words.append(word)
+
+        if success:
             correct += 1
             if correct < target:
                 print(f"\n{correct} down, {target - correct} to go!")
@@ -296,6 +322,13 @@ def main():
         print("║    3. Quit                             ║")
         print("║                                        ║")
         print("╚════════════════════════════════════════╝")
+
+        # Show status
+        if PYGAME_AVAILABLE:
+            available = check_images()
+            print(f"\n  Spelling game: {len(available)}/14 images ready")
+        else:
+            print("\n  ⚠ Pygame not installed (needed for spelling)")
 
         choice = input("\nEnter 1, 2, or 3: ").strip()
 

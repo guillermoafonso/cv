@@ -1,0 +1,11 @@
+# Downloaded images (can be re-downloaded with download_images.py)
+images/*.png
+images/*.jpg
+images/*.jpeg
+images/*.gif
+images/*.bmp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
