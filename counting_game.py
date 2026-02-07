@@ -34,8 +34,34 @@ DEFAULT_CONFIG = {
     "min_count": 5,
     "max_count": 10,
     "required_correct": 5,
-    "escape_code": "LETMEOUT"
+    "escape_code": "LETMEOUT",
+    "auto_sync": False
 }
+
+
+def sync_with_gdrive(action="sync"):
+    """Run the Google Drive sync script if it exists.
+
+    Args:
+        action: 'pull', 'push', or 'sync'
+    """
+    import subprocess
+    script_path = os.path.join(get_script_dir(), 'sync_gdrive.sh')
+
+    if os.path.exists(script_path):
+        try:
+            result = subprocess.run(
+                [script_path, action],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode != 0:
+                # Silently fail - don't interrupt the game
+                pass
+        except (subprocess.TimeoutExpired, Exception):
+            # Silently fail - sync is optional
+            pass
 
 # Colors
 WHITE = (255, 255, 255)
@@ -562,11 +588,15 @@ def play_spelling_round(round_num, target_correct, available_words):
 
 def counting_game():
     """Run the locked counting game - must get required_correct to exit."""
+    # Try to sync config from Google Drive first
+    sync_with_gdrive("pull")
+
     # Load configuration
     config = load_config()
     total_needed = config.get("required_correct", 5)
     min_count = config.get("min_count", 5)
     max_count = config.get("max_count", 10)
+    auto_sync = config.get("auto_sync", False)
 
     # Load stats and start a new session
     stats = load_stats()
@@ -606,6 +636,8 @@ def counting_game():
             stats["total_sessions"] += 1
             stats["sessions"].append(session)
             save_stats(stats)
+            if auto_sync:
+                sync_with_gdrive("push")
 
             clear_screen()
             print("\n🔓 Escape code accepted. Exiting...\n")
@@ -634,6 +666,8 @@ def counting_game():
     stats["total_sessions"] += 1
     stats["sessions"].append(session)
     save_stats(stats)
+    if auto_sync:
+        sync_with_gdrive("push")
 
     # Victory screen
     clear_screen()
