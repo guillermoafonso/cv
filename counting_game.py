@@ -21,7 +21,7 @@ except ImportError:
 SYMBOLS = ['★', '●', '♦', '♠', '♥', '▲', '■', '○', '◆', '☆']
 
 # Words for the spelling game
-SPELLING_WORDS = ['DOG', 'CAR', 'CAT', 'TREE', 'FOOT', 'HAND', 'ARM', 'HEAD',
+SPELLING_WORDS = ['DOG', 'CAR', 'CAT', 'TREE', 'BALL', 'APPLE', 'FISH', 'BOOK',
                   'SUN', 'MOON', 'STAR', 'MILK', 'BED', 'HOUSE']
 
 # Colors
@@ -180,69 +180,72 @@ def draw_tree(screen, cx, cy):
     pygame.draw.circle(screen, DARK_GREEN, (cx, cy - 30), 50)
 
 
-def draw_foot(screen, cx, cy):
-    """Draw a simple foot."""
-    # Main foot
-    pygame.draw.ellipse(screen, BEIGE, (cx - 40, cy - 30, 80, 120))
-    # Toes
-    pygame.draw.circle(screen, BEIGE, (cx - 30, cy - 45), 18)
-    pygame.draw.circle(screen, BEIGE, (cx - 8, cy - 55), 20)
-    pygame.draw.circle(screen, BEIGE, (cx + 15, cy - 50), 18)
-    pygame.draw.circle(screen, BEIGE, (cx + 32, cy - 40), 15)
-    pygame.draw.circle(screen, BEIGE, (cx + 42, cy - 25), 12)
+def draw_ball(screen, cx, cy):
+    """Draw a colorful beach ball."""
+    # Main ball
+    pygame.draw.circle(screen, RED, (cx, cy), 70)
+    # Stripes
+    pygame.draw.arc(screen, BLUE, (cx - 70, cy - 70, 140, 140), 0.5, 1.5, 70)
+    pygame.draw.arc(screen, YELLOW, (cx - 70, cy - 70, 140, 140), 2.0, 3.0, 70)
+    pygame.draw.arc(screen, GREEN, (cx - 70, cy - 70, 140, 140), 3.5, 4.5, 70)
+    pygame.draw.arc(screen, WHITE, (cx - 70, cy - 70, 140, 140), 5.0, 6.0, 70)
     # Outline
-    pygame.draw.ellipse(screen, BROWN, (cx - 40, cy - 30, 80, 120), 3)
+    pygame.draw.circle(screen, BLACK, (cx, cy), 70, 3)
+    # Shine highlight
+    pygame.draw.circle(screen, WHITE, (cx - 25, cy - 30), 15)
 
 
-def draw_hand(screen, cx, cy):
-    """Draw a simple hand."""
-    # Palm
-    pygame.draw.ellipse(screen, BEIGE, (cx - 40, cy - 20, 80, 90))
-    # Fingers
-    pygame.draw.ellipse(screen, BEIGE, (cx - 35, cy - 90, 18, 70))  # pinky
-    pygame.draw.ellipse(screen, BEIGE, (cx - 15, cy - 110, 20, 90))  # ring
-    pygame.draw.ellipse(screen, BEIGE, (cx + 5, cy - 115, 20, 95))  # middle
-    pygame.draw.ellipse(screen, BEIGE, (cx + 25, cy - 105, 20, 85))  # index
-    # Thumb
-    pygame.draw.ellipse(screen, BEIGE, (cx + 45, cy - 40, 30, 55))
-    # Outlines
-    pygame.draw.ellipse(screen, BROWN, (cx - 40, cy - 20, 80, 90), 2)
+def draw_apple(screen, cx, cy):
+    """Draw a red apple."""
+    # Main apple body
+    pygame.draw.circle(screen, RED, (cx, cy), 60)
+    pygame.draw.circle(screen, RED, (cx - 25, cy + 10), 50)
+    pygame.draw.circle(screen, RED, (cx + 25, cy + 10), 50)
+    # Stem
+    pygame.draw.rect(screen, BROWN, (cx - 4, cy - 75, 8, 25))
+    # Leaf
+    pygame.draw.ellipse(screen, GREEN, (cx + 5, cy - 75, 35, 18))
+    # Shine highlight
+    pygame.draw.circle(screen, (255, 200, 200), (cx - 20, cy - 25), 12)
 
 
-def draw_arm(screen, cx, cy):
-    """Draw a simple arm."""
-    # Upper arm
-    pygame.draw.ellipse(screen, BEIGE, (cx - 100, cy - 25, 100, 50))
-    # Forearm
-    pygame.draw.ellipse(screen, BEIGE, (cx - 20, cy - 25, 100, 50))
-    # Hand
-    pygame.draw.circle(screen, BEIGE, (cx + 90, cy), 35)
-    # Outline
-    pygame.draw.ellipse(screen, BROWN, (cx - 100, cy - 25, 100, 50), 3)
-    pygame.draw.ellipse(screen, BROWN, (cx - 20, cy - 25, 100, 50), 3)
-    pygame.draw.circle(screen, BROWN, (cx + 90, cy), 35, 3)
-
-
-def draw_head(screen, cx, cy):
-    """Draw a simple head/face."""
-    # Face
-    pygame.draw.circle(screen, BEIGE, (cx, cy), 80)
-    # Hair
-    pygame.draw.arc(screen, BROWN, (cx - 85, cy - 90, 170, 100), 0, 3.14, 20)
-    # Eyes
-    pygame.draw.ellipse(screen, WHITE, (cx - 40, cy - 25, 30, 20))
-    pygame.draw.ellipse(screen, WHITE, (cx + 10, cy - 25, 30, 20))
-    pygame.draw.circle(screen, BLUE, (cx - 25, cy - 15), 8)
-    pygame.draw.circle(screen, BLUE, (cx + 25, cy - 15), 8)
-    pygame.draw.circle(screen, BLACK, (cx - 25, cy - 15), 4)
-    pygame.draw.circle(screen, BLACK, (cx + 25, cy - 15), 4)
-    # Nose
-    pygame.draw.polygon(screen, BROWN, [(cx, cy - 5), (cx - 10, cy + 20), (cx + 10, cy + 20)])
+def draw_fish(screen, cx, cy):
+    """Draw a colorful fish."""
+    # Body
+    pygame.draw.ellipse(screen, ORANGE, (cx - 70, cy - 35, 120, 70))
+    # Tail
+    pygame.draw.polygon(screen, ORANGE, [(cx + 40, cy), (cx + 90, cy - 40), (cx + 90, cy + 40)])
+    # Fins
+    pygame.draw.polygon(screen, YELLOW, [(cx - 20, cy - 35), (cx, cy - 70), (cx + 20, cy - 35)])
+    pygame.draw.polygon(screen, YELLOW, [(cx - 20, cy + 35), (cx, cy + 60), (cx + 20, cy + 35)])
+    # Eye
+    pygame.draw.circle(screen, WHITE, (cx - 35, cy - 5), 15)
+    pygame.draw.circle(screen, BLACK, (cx - 35, cy - 5), 7)
     # Mouth
-    pygame.draw.arc(screen, RED, (cx - 25, cy + 25, 50, 30), 3.14, 0, 4)
-    # Ears
-    pygame.draw.ellipse(screen, BEIGE, (cx - 95, cy - 20, 25, 40))
-    pygame.draw.ellipse(screen, BEIGE, (cx + 70, cy - 20, 25, 40))
+    pygame.draw.arc(screen, BLACK, (cx - 65, cy + 5, 20, 15), 3.14, 0, 3)
+    # Scales pattern
+    pygame.draw.arc(screen, (200, 120, 40), (cx - 30, cy - 20, 30, 30), 0, 3.14, 2)
+    pygame.draw.arc(screen, (200, 120, 40), (cx, cy - 15, 30, 30), 0, 3.14, 2)
+    pygame.draw.arc(screen, (200, 120, 40), (cx - 15, cy + 5, 30, 30), 0, 3.14, 2)
+
+
+def draw_book(screen, cx, cy):
+    """Draw an open book."""
+    # Left page
+    pygame.draw.rect(screen, WHITE, (cx - 90, cy - 50, 80, 100))
+    pygame.draw.rect(screen, BLACK, (cx - 90, cy - 50, 80, 100), 2)
+    # Right page
+    pygame.draw.rect(screen, WHITE, (cx + 10, cy - 50, 80, 100))
+    pygame.draw.rect(screen, BLACK, (cx + 10, cy - 50, 80, 100), 2)
+    # Spine
+    pygame.draw.rect(screen, RED, (cx - 10, cy - 55, 20, 110))
+    pygame.draw.rect(screen, (150, 30, 30), (cx - 10, cy - 55, 20, 110), 2)
+    # Text lines on left page
+    for i in range(5):
+        pygame.draw.line(screen, GRAY, (cx - 80, cy - 35 + i * 18), (cx - 20, cy - 35 + i * 18), 2)
+    # Text lines on right page
+    for i in range(5):
+        pygame.draw.line(screen, GRAY, (cx + 20, cy - 35 + i * 18), (cx + 80, cy - 35 + i * 18), 2)
 
 
 def draw_sun(screen, cx, cy):
@@ -270,13 +273,10 @@ def draw_moon(screen, cx, cy):
     pygame.draw.circle(screen, YELLOW, (cx, cy), 70)
     # Cut out circle to make crescent
     pygame.draw.circle(screen, WHITE, (cx + 40, cy - 20), 55)
-    # Stars around
-    for pos in [(-80, -60), (70, -70), (-70, 50), (80, 40), (0, -90)]:
-        pygame.draw.polygon(screen, YELLOW, [
-            (cx + pos[0], cy + pos[1] - 8),
-            (cx + pos[0] - 3, cy + pos[1] + 3),
-            (cx + pos[0] + 3, cy + pos[1] + 3)
-        ])
+    # Add some crater details
+    pygame.draw.circle(screen, (230, 200, 50), (cx - 30, cy - 20), 8)
+    pygame.draw.circle(screen, (230, 200, 50), (cx - 45, cy + 20), 6)
+    pygame.draw.circle(screen, (230, 200, 50), (cx - 20, cy + 35), 5)
 
 
 def draw_star(screen, cx, cy):
@@ -295,40 +295,76 @@ def draw_star(screen, cx, cy):
 
 
 def draw_milk(screen, cx, cy):
-    """Draw a milk carton."""
-    # Carton body
-    pygame.draw.rect(screen, WHITE, (cx - 40, cy - 60, 80, 120))
-    pygame.draw.rect(screen, BLUE, (cx - 40, cy - 60, 80, 120), 3)
-    # Top fold
-    pygame.draw.polygon(screen, WHITE, [(cx - 40, cy - 60), (cx, cy - 90), (cx + 40, cy - 60)])
-    pygame.draw.polygon(screen, BLUE, [(cx - 40, cy - 60), (cx, cy - 90), (cx + 40, cy - 60)], 3)
-    # Cow spots decoration
-    pygame.draw.ellipse(screen, BLACK, (cx - 25, cy - 30, 20, 15))
-    pygame.draw.ellipse(screen, BLACK, (cx + 5, cy - 10, 25, 18))
-    pygame.draw.ellipse(screen, BLACK, (cx - 20, cy + 20, 18, 12))
-    # Glass of milk
-    pygame.draw.rect(screen, LIGHT_BLUE, (cx - 15, cy + 70, 30, 40), border_radius=3)
-    pygame.draw.rect(screen, WHITE, (cx - 12, cy + 75, 24, 30))
+    """Draw a 3D milk carton with glass."""
+    # Carton - right side (3D effect)
+    pygame.draw.polygon(screen, (220, 220, 220), [
+        (cx - 10, cy - 60), (cx + 20, cy - 70), (cx + 20, cy + 50), (cx - 10, cy + 60)
+    ])
+    # Carton - front face
+    pygame.draw.rect(screen, WHITE, (cx - 70, cy - 60, 60, 120))
+    pygame.draw.rect(screen, BLUE, (cx - 70, cy - 60, 60, 120), 3)
+    # Carton - top (3D)
+    pygame.draw.polygon(screen, (240, 240, 240), [
+        (cx - 70, cy - 60), (cx - 40, cy - 90), (cx - 10, cy - 60)
+    ])
+    pygame.draw.polygon(screen, BLUE, [
+        (cx - 70, cy - 60), (cx - 40, cy - 90), (cx - 10, cy - 60)
+    ], 2)
+    # Top fold peak (3D)
+    pygame.draw.polygon(screen, (230, 230, 230), [
+        (cx - 40, cy - 90), (cx - 10, cy - 60), (cx + 20, cy - 70), (cx - 10, cy - 100)
+    ])
+    pygame.draw.polygon(screen, BLUE, [
+        (cx - 40, cy - 90), (cx - 10, cy - 60), (cx + 20, cy - 70), (cx - 10, cy - 100)
+    ], 2)
+    # Cow spots on front
+    pygame.draw.ellipse(screen, BLACK, (cx - 60, cy - 30, 18, 12))
+    pygame.draw.ellipse(screen, BLACK, (cx - 40, cy - 5, 20, 14))
+    pygame.draw.ellipse(screen, BLACK, (cx - 55, cy + 25, 15, 10))
+    # Glass of milk to the right
+    pygame.draw.polygon(screen, LIGHT_BLUE, [
+        (cx + 50, cy - 10), (cx + 110, cy - 10), (cx + 105, cy + 60), (cx + 55, cy + 60)
+    ])
+    pygame.draw.polygon(screen, (100, 180, 220), [
+        (cx + 50, cy - 10), (cx + 110, cy - 10), (cx + 105, cy + 60), (cx + 55, cy + 60)
+    ], 3)
+    # Milk in glass
+    pygame.draw.polygon(screen, WHITE, [
+        (cx + 53, cy + 5), (cx + 107, cy + 5), (cx + 104, cy + 57), (cx + 56, cy + 57)
+    ])
 
 
 def draw_bed(screen, cx, cy):
-    """Draw a simple bed."""
-    # Mattress
-    pygame.draw.rect(screen, WHITE, (cx - 90, cy - 20, 180, 60))
-    pygame.draw.rect(screen, BLUE, (cx - 90, cy - 20, 180, 60), 3)
-    # Pillow
-    pygame.draw.ellipse(screen, WHITE, (cx - 80, cy - 35, 50, 30))
-    pygame.draw.ellipse(screen, BLUE, (cx - 80, cy - 35, 50, 30), 2)
-    # Blanket
-    pygame.draw.rect(screen, RED, (cx - 90, cy, 180, 40))
-    pygame.draw.rect(screen, (180, 40, 40), (cx - 90, cy, 180, 40), 3)
-    # Headboard
-    pygame.draw.rect(screen, BROWN, (cx - 100, cy - 70, 20, 120))
+    """Draw a detailed bed."""
+    # Headboard (decorative)
+    pygame.draw.rect(screen, BROWN, (cx - 100, cy - 80, 25, 130))
+    pygame.draw.rect(screen, (100, 60, 30), (cx - 100, cy - 80, 25, 130), 3)
+    pygame.draw.circle(screen, BROWN, (cx - 88, cy - 80), 12)  # Decorative top
     # Footboard
-    pygame.draw.rect(screen, BROWN, (cx + 80, cy - 40, 20, 90))
+    pygame.draw.rect(screen, BROWN, (cx + 75, cy - 40, 25, 90))
+    pygame.draw.rect(screen, (100, 60, 30), (cx + 75, cy - 40, 25, 90), 3)
+    pygame.draw.circle(screen, BROWN, (cx + 88, cy - 40), 12)  # Decorative top
+    # Bed frame base
+    pygame.draw.rect(screen, (120, 80, 50), (cx - 75, cy + 35, 150, 15))
+    # Mattress
+    pygame.draw.rect(screen, WHITE, (cx - 75, cy - 25, 150, 60))
+    pygame.draw.rect(screen, (200, 200, 200), (cx - 75, cy - 25, 150, 60), 2)
+    # Pillow
+    pygame.draw.ellipse(screen, WHITE, (cx - 70, cy - 45, 55, 30))
+    pygame.draw.ellipse(screen, (180, 180, 180), (cx - 70, cy - 45, 55, 30), 2)
+    # Second pillow
+    pygame.draw.ellipse(screen, (250, 250, 250), (cx - 55, cy - 40, 50, 25))
+    pygame.draw.ellipse(screen, (180, 180, 180), (cx - 55, cy - 40, 50, 25), 2)
+    # Blanket with fold detail
+    pygame.draw.rect(screen, RED, (cx - 75, cy + 5, 150, 30))
+    pygame.draw.rect(screen, (180, 50, 50), (cx - 75, cy + 5, 150, 30), 2)
+    # Blanket fold line
+    pygame.draw.line(screen, (150, 40, 40), (cx - 75, cy + 5), (cx + 75, cy + 5), 3)
+    # Sheet showing
+    pygame.draw.rect(screen, WHITE, (cx - 75, cy - 5, 150, 12))
     # Legs
-    pygame.draw.rect(screen, BROWN, (cx - 95, cy + 40, 15, 30))
-    pygame.draw.rect(screen, BROWN, (cx + 80, cy + 40, 15, 30))
+    pygame.draw.rect(screen, BROWN, (cx - 80, cy + 45, 12, 25))
+    pygame.draw.rect(screen, BROWN, (cx + 68, cy + 45, 12, 25))
 
 
 def draw_house(screen, cx, cy):
@@ -357,10 +393,10 @@ DRAW_FUNCTIONS = {
     'CAT': draw_cat,
     'CAR': draw_car,
     'TREE': draw_tree,
-    'FOOT': draw_foot,
-    'HAND': draw_hand,
-    'ARM': draw_arm,
-    'HEAD': draw_head,
+    'BALL': draw_ball,
+    'APPLE': draw_apple,
+    'FISH': draw_fish,
+    'BOOK': draw_book,
     'SUN': draw_sun,
     'MOON': draw_moon,
     'STAR': draw_star,
