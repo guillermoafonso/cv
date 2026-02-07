@@ -24,6 +24,9 @@ SYMBOLS = ['★', '●', '♦', '♠', '♥', '▲', '■', '○', '◆', '☆']
 SPELLING_WORDS = ['DOG', 'CAR', 'CAT', 'TREE', 'BALL', 'APPLE', 'FISH', 'BOOK',
                   'SUN', 'MOON', 'STAR', 'MILK', 'BED', 'HOUSE']
 
+# Secret escape code to exit the locked counting game
+ESCAPE_CODE = "LETMEOUT"
+
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -67,10 +70,16 @@ def display_symbols(count, symbol):
     print('└' + '─' * grid_width + '┘')
 
 
-def play_counting_round(round_num):
-    """Play a single round of the counting game."""
+def play_counting_round(correct_so_far, total_needed):
+    """Play a single round of the counting game.
+
+    Returns:
+        'correct' - if answer was correct
+        'wrong' - if answer was wrong
+        'escape' - if escape code was entered
+    """
     clear_screen()
-    print(f"\n═══ Round {round_num} of 5 ═══\n")
+    print(f"\n═══ {correct_so_far} of {total_needed} correct ═══\n")
 
     count = random.randint(5, 10)
     symbol = random.choice(SYMBOLS)
@@ -80,18 +89,24 @@ def play_counting_round(round_num):
     print(f"\nHow many '{symbol}' symbols do you see?")
 
     while True:
+        answer = input("Your answer: ").strip()
+
+        # Check for escape code
+        if answer.upper() == ESCAPE_CODE:
+            return 'escape'
+
         try:
-            answer = int(input("Your answer: "))
+            answer_num = int(answer)
             break
         except ValueError:
             print("Please enter a number.")
 
-    if answer == count:
+    if answer_num == count:
         print(f"\n✓ Correct! There were {count} symbols.")
-        return True
+        return 'correct'
     else:
         print(f"\n✗ Not quite. There were {count} symbols.")
-        return False
+        return 'wrong'
 
 
 # ============== DRAWING FUNCTIONS ==============
@@ -468,40 +483,44 @@ def play_spelling_round(round_num, target_correct, available_words):
 
 
 def counting_game():
-    """Run the counting game."""
+    """Run the locked counting game - must get 5 correct to exit."""
     clear_screen()
     print("╔════════════════════════════════════════╗")
     print("║      SYMBOL COUNTING GAME              ║")
     print("║                                        ║")
     print("║  Count the symbols on each screen!    ║")
-    print("║  You will have 5 rounds.              ║")
+    print("║  Get 5 correct to finish!             ║")
     print("╚════════════════════════════════════════╝")
     print("\nPress Enter to start...")
     input()
 
-    score = 0
+    correct = 0
+    total_needed = 5
 
-    for round_num in range(1, 6):
-        if play_counting_round(round_num):
-            score += 1
+    while correct < total_needed:
+        result = play_counting_round(correct, total_needed)
 
-        if round_num < 5:
-            input("\nPress Enter for the next round...")
+        if result == 'escape':
+            clear_screen()
+            print("\n🔓 Escape code accepted. Exiting...\n")
+            return
 
+        if result == 'correct':
+            correct += 1
+            if correct < total_needed:
+                print(f"\n{total_needed - correct} more to go!")
+
+        input("\nPress Enter to continue...")
+
+    # Victory screen
     clear_screen()
     print("\n╔════════════════════════════════════════╗")
-    print("║            GAME OVER!                  ║")
-    print("╠════════════════════════════════════════╣")
-    print(f"║      Your score: {score} out of 5            ║")
+    print("║         🎉 YOU DID IT! 🎉              ║")
+    print("║                                        ║")
+    print("║      You got 5 correct answers!       ║")
+    print("║                                        ║")
+    print("║          Great counting!              ║")
     print("╚════════════════════════════════════════╝")
-
-    if score == 5:
-        print("\n🎉 Perfect score! Amazing!")
-    elif score >= 3:
-        print("\n👍 Good job!")
-    else:
-        print("\n💪 Keep practicing!")
-
     print()
 
 
@@ -561,7 +580,15 @@ def spelling_game():
 
 
 def main():
-    """Main menu to choose game mode."""
+    """Run the counting game directly (locked mode)."""
+    counting_game()
+    clear_screen()
+    print("\nThanks for playing! Goodbye!\n")
+
+
+# Keep spelling_game available for future use but not in main menu
+def main_with_menu():
+    """Alternative main with menu (not used by default)."""
     while True:
         clear_screen()
         print("╔════════════════════════════════════════╗")
