@@ -637,6 +637,7 @@ def counting_game():
             stats["sessions"].append(session)
             save_stats(stats)
             if auto_sync:
+                print("\nSaving progress...")
                 sync_with_gdrive("push")
 
             clear_screen()
@@ -658,7 +659,9 @@ def counting_game():
         stats["total_rounds"] += 1
         save_stats(stats)  # Save after each round
 
-        input("\nPress Enter to continue...")
+        # Only ask to continue if not finished yet
+        if correct < total_needed:
+            input("\nPress Enter to continue...")
 
     # Mark session complete
     session["completed"] = True
@@ -667,6 +670,7 @@ def counting_game():
     stats["sessions"].append(session)
     save_stats(stats)
     if auto_sync:
+        print("\nSaving progress...")
         sync_with_gdrive("push")
 
     # Victory screen
