@@ -1,0 +1,6 @@
+{
+    "min_count": 5,
+    "max_count": 10,
+    "required_correct": 5,
+    "escape_code": "LETMEOUT"
+}

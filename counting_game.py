@@ -4,11 +4,16 @@ Symbol Counting & Spelling Game for Raspberry Pi
 Two game modes: count symbols or spell words from pictures.
 Uses Pygame to draw simple pictures for the spelling game.
 No external images needed - everything is drawn programmatically!
+
+Configuration: Edit config.json to change settings remotely
+Statistics: View stats.json to see game progress and errors
 """
 
 import random
 import os
 import math
+import json
+from datetime import datetime
 
 # Check if pygame is available for the spelling game
 try:
@@ -24,8 +29,13 @@ SYMBOLS = ['★', '●', '♦', '♠', '♥', '▲', '■', '○', '◆', '☆']
 SPELLING_WORDS = ['DOG', 'CAR', 'CAT', 'TREE', 'BALL', 'APPLE', 'FISH', 'BOOK',
                   'SUN', 'MOON', 'STAR', 'MILK', 'BED', 'HOUSE']
 
-# Secret escape code to exit the locked counting game
-ESCAPE_CODE = "LETMEOUT"
+# Default settings (can be overridden by config.json)
+DEFAULT_CONFIG = {
+    "min_count": 5,
+    "max_count": 10,
+    "required_correct": 5,
+    "escape_code": "LETMEOUT"
+}
 
 # Colors
 WHITE = (255, 255, 255)
@@ -41,6 +51,69 @@ GRAY = (150, 150, 150)
 LIGHT_BLUE = (135, 206, 235)
 DARK_GREEN = (34, 120, 34)
 BEIGE = (245, 222, 179)
+
+
+def get_script_dir():
+    """Get the directory where this script is located."""
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def load_config():
+    """Load configuration from config.json, or use defaults."""
+    config_path = os.path.join(get_script_dir(), 'config.json')
+    config = DEFAULT_CONFIG.copy()
+
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                loaded = json.load(f)
+                config.update(loaded)
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Warning: Could not load config.json, using defaults. Error: {e}")
+
+    return config
+
+
+def load_stats():
+    """Load existing stats from stats.json."""
+    stats_path = os.path.join(get_script_dir(), 'stats.json')
+
+    try:
+        if os.path.exists(stats_path):
+            with open(stats_path, 'r') as f:
+                return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        pass
+
+    return {
+        "total_sessions": 0,
+        "total_rounds": 0,
+        "total_correct": 0,
+        "total_wrong": 0,
+        "sessions": []
+    }
+
+
+def save_stats(stats):
+    """Save stats to stats.json."""
+    stats_path = os.path.join(get_script_dir(), 'stats.json')
+
+    try:
+        with open(stats_path, 'w') as f:
+            json.dump(stats, f, indent=2)
+    except IOError as e:
+        print(f"Warning: Could not save stats. Error: {e}")
+
+
+def log_round(session, correct_answer, user_answer, was_correct, symbol):
+    """Log a single round to the session."""
+    session["rounds"].append({
+        "timestamp": datetime.now().isoformat(),
+        "symbol": symbol,
+        "correct_answer": correct_answer,
+        "user_answer": user_answer,
+        "was_correct": was_correct
+    })
 
 
 def clear_screen():
@@ -70,18 +143,21 @@ def display_symbols(count, symbol):
     print('└' + '─' * grid_width + '┘')
 
 
-def play_counting_round(correct_so_far, total_needed):
+def play_counting_round(correct_so_far, total_needed, config):
     """Play a single round of the counting game.
 
     Returns:
-        'correct' - if answer was correct
-        'wrong' - if answer was wrong
-        'escape' - if escape code was entered
+        tuple: (result, details) where result is 'correct', 'wrong', or 'escape'
+               and details is a dict with count, symbol, user_answer
     """
     clear_screen()
     print(f"\n═══ {correct_so_far} of {total_needed} correct ═══\n")
 
-    count = random.randint(5, 10)
+    min_count = config.get("min_count", 5)
+    max_count = config.get("max_count", 10)
+    escape_code = config.get("escape_code", "LETMEOUT")
+
+    count = random.randint(min_count, max_count)
     symbol = random.choice(SYMBOLS)
 
     display_symbols(count, symbol)
@@ -92,8 +168,8 @@ def play_counting_round(correct_so_far, total_needed):
         answer = input("Your answer: ").strip()
 
         # Check for escape code
-        if answer.upper() == ESCAPE_CODE:
-            return 'escape'
+        if answer.upper() == escape_code.upper():
+            return ('escape', {"count": count, "symbol": symbol, "user_answer": None})
 
         try:
             answer_num = int(answer)
@@ -101,12 +177,14 @@ def play_counting_round(correct_so_far, total_needed):
         except ValueError:
             print("Please enter a number.")
 
+    details = {"count": count, "symbol": symbol, "user_answer": answer_num}
+
     if answer_num == count:
         print(f"\n✓ Correct! There were {count} symbols.")
-        return 'correct'
+        return ('correct', details)
     else:
         print(f"\n✗ Not quite. There were {count} symbols.")
-        return 'wrong'
+        return ('wrong', details)
 
 
 # ============== DRAWING FUNCTIONS ==============
@@ -483,41 +561,86 @@ def play_spelling_round(round_num, target_correct, available_words):
 
 
 def counting_game():
-    """Run the locked counting game - must get 5 correct to exit."""
+    """Run the locked counting game - must get required_correct to exit."""
+    # Load configuration
+    config = load_config()
+    total_needed = config.get("required_correct", 5)
+    min_count = config.get("min_count", 5)
+    max_count = config.get("max_count", 10)
+
+    # Load stats and start a new session
+    stats = load_stats()
+    session = {
+        "start_time": datetime.now().isoformat(),
+        "end_time": None,
+        "config": {
+            "min_count": min_count,
+            "max_count": max_count,
+            "required_correct": total_needed
+        },
+        "completed": False,
+        "escaped": False,
+        "rounds": []
+    }
+
     clear_screen()
     print("╔════════════════════════════════════════╗")
     print("║      SYMBOL COUNTING GAME              ║")
     print("║                                        ║")
     print("║  Count the symbols on each screen!    ║")
-    print("║  Get 5 correct to finish!             ║")
+    print(f"║  Get {total_needed} correct to finish!             ║")
+    print(f"║  (counting {min_count} to {max_count} symbols)           ║")
     print("╚════════════════════════════════════════╝")
     print("\nPress Enter to start...")
     input()
 
     correct = 0
-    total_needed = 5
 
     while correct < total_needed:
-        result = play_counting_round(correct, total_needed)
+        result, details = play_counting_round(correct, total_needed, config)
 
         if result == 'escape':
+            # Log escape
+            session["escaped"] = True
+            session["end_time"] = datetime.now().isoformat()
+            stats["total_sessions"] += 1
+            stats["sessions"].append(session)
+            save_stats(stats)
+
             clear_screen()
             print("\n🔓 Escape code accepted. Exiting...\n")
             return
 
-        if result == 'correct':
+        # Log this round
+        was_correct = (result == 'correct')
+        log_round(session, details["count"], details["user_answer"], was_correct, details["symbol"])
+
+        if was_correct:
             correct += 1
+            stats["total_correct"] += 1
             if correct < total_needed:
                 print(f"\n{total_needed - correct} more to go!")
+        else:
+            stats["total_wrong"] += 1
+
+        stats["total_rounds"] += 1
+        save_stats(stats)  # Save after each round
 
         input("\nPress Enter to continue...")
+
+    # Mark session complete
+    session["completed"] = True
+    session["end_time"] = datetime.now().isoformat()
+    stats["total_sessions"] += 1
+    stats["sessions"].append(session)
+    save_stats(stats)
 
     # Victory screen
     clear_screen()
     print("\n╔════════════════════════════════════════╗")
     print("║         🎉 YOU DID IT! 🎉              ║")
     print("║                                        ║")
-    print("║      You got 5 correct answers!       ║")
+    print(f"║      You got {total_needed} correct answers!       ║")
     print("║                                        ║")
     print("║          Great counting!              ║")
     print("╚════════════════════════════════════════╝")
