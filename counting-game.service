@@ -1,0 +1,23 @@
+[Unit]
+Description=Counting Game - must complete before desktop loads
+Before=display-manager.service
+After=systemd-user-sessions.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+# IMPORTANT: Change 'pi' below to your actual username on the Pi
+ExecStart=/home/pi/cv/boot_game.sh
+StandardInput=tty
+TTYPath=/dev/tty1
+# Run as the pi user (change if your username is different)
+User=pi
+# Allow access to display and input devices
+SupplementaryGroups=video input render
+# Give the game up to 10 minutes, then let the desktop start
+TimeoutStartSec=600
+# Always let the desktop start, even if the game fails
+RemainAfterExit=no
+
+[Install]
+WantedBy=graphical.target
