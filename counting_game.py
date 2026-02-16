@@ -13,6 +13,7 @@ import os
 import math
 import json
 import sys
+import signal
 from datetime import datetime
 
 try:
@@ -383,10 +384,11 @@ def play_counting_round_fullscreen(screen, screen_w, screen_h, correct_so_far, t
         return ('wrong', details)
 
 
-def counting_game():
+def counting_game(boot_mode=False):
     """Run the locked counting game in fullscreen - must get required_correct to exit."""
-    # Try to sync config from Google Drive first
-    sync_with_gdrive("pull")
+    # Skip sync at boot - no internet yet
+    if not boot_mode:
+        sync_with_gdrive("pull")
 
     # Load configuration
     config = load_config()
@@ -441,7 +443,7 @@ def counting_game():
             stats["total_sessions"] += 1
             stats["sessions"].append(session)
             save_stats(stats)
-            if auto_sync:
+            if auto_sync and not boot_mode:
                 sync_with_gdrive("push")
 
             show_message_screen(screen, screen_w, screen_h, [
@@ -469,7 +471,7 @@ def counting_game():
     stats["total_sessions"] += 1
     stats["sessions"].append(session)
     save_stats(stats)
-    if auto_sync:
+    if auto_sync and not boot_mode:
         sync_with_gdrive("push")
 
     # Victory screen
@@ -834,7 +836,8 @@ def spelling_game():
 
 def main():
     """Run the counting game directly (locked mode, fullscreen)."""
-    counting_game()
+    boot_mode = '--boot' in sys.argv
+    counting_game(boot_mode=boot_mode)
 
 
 # Keep spelling_game available for future use but not in main menu
