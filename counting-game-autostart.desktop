@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Counting Game
-Exec=/home/child/cv/boot_game.sh
+Exec=/home/alex/cv/boot_game.sh
 X-GNOME-Autostart-Phase=Application
 X-GNOME-Autostart-enabled=true
 Hidden=false
