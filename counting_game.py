@@ -2,8 +2,7 @@
 """
 Symbol Counting & Spelling Game for Raspberry Pi
 Two game modes: count symbols or spell words from pictures.
-Uses Pygame to draw simple pictures for the spelling game.
-No external images needed - everything is drawn programmatically!
+Uses Pygame for fullscreen display and drawing.
 
 Configuration: Edit config.json to change settings remotely
 Statistics: View stats.json to see game progress and errors
@@ -13,14 +12,15 @@ import random
 import os
 import math
 import json
+import sys
 from datetime import datetime
 
-# Check if pygame is available for the spelling game
 try:
     import pygame
     PYGAME_AVAILABLE = True
 except ImportError:
-    PYGAME_AVAILABLE = False
+    print("Pygame is required. Install with: sudo apt install python3-pygame")
+    sys.exit(1)
 
 # Symbols to use for the counting game
 SYMBOLS = ['★', '●', '♦', '♠', '♥', '▲', '■', '○', '◆', '☆']
@@ -42,6 +42,8 @@ DEFAULT_CONFIG = {
 def sync_with_gdrive(action="sync"):
     """Run the Google Drive sync script if it exists.
 
+    Fails gracefully if no internet or sync fails - game continues normally.
+
     Args:
         action: 'pull', 'push', or 'sync'
     """
@@ -54,13 +56,11 @@ def sync_with_gdrive(action="sync"):
                 [script_path, action],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=10  # Short timeout - don't block the game
             )
-            if result.returncode != 0:
-                # Silently fail - don't interrupt the game
-                pass
-        except (subprocess.TimeoutExpired, Exception):
-            # Silently fail - sync is optional
+            # Silently ignore failures - sync is optional
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, Exception):
+            # No internet, timeout, or other error - just skip sync
             pass
 
 # Colors
@@ -77,6 +77,7 @@ GRAY = (150, 150, 150)
 LIGHT_BLUE = (135, 206, 235)
 DARK_GREEN = (34, 120, 34)
 BEIGE = (245, 222, 179)
+DARK_GRAY = (80, 80, 80)
 
 
 def get_script_dir():
@@ -94,8 +95,8 @@ def load_config():
             with open(config_path, 'r') as f:
                 loaded = json.load(f)
                 config.update(loaded)
-    except (json.JSONDecodeError, IOError) as e:
-        print(f"Warning: Could not load config.json, using defaults. Error: {e}")
+    except (json.JSONDecodeError, IOError):
+        pass
 
     return config
 
@@ -127,8 +128,8 @@ def save_stats(stats):
     try:
         with open(stats_path, 'w') as f:
             json.dump(stats, f, indent=2)
-    except IOError as e:
-        print(f"Warning: Could not save stats. Error: {e}")
+    except IOError:
+        pass
 
 
 def log_round(session, correct_answer, user_answer, was_correct, symbol):
@@ -142,43 +143,124 @@ def log_round(session, correct_answer, user_answer, was_correct, symbol):
     })
 
 
-def clear_screen():
-    """Clear the terminal screen."""
-    os.system('clear' if os.name == 'posix' else 'cls')
+# ============== PYGAME FULLSCREEN HELPERS ==============
+
+def init_fullscreen():
+    """Initialize Pygame in fullscreen mode and return screen + dimensions."""
+    pygame.init()
+    info = pygame.display.Info()
+    screen_w, screen_h = info.current_w, info.current_h
+    screen = pygame.display.set_mode((screen_w, screen_h), pygame.FULLSCREEN)
+    pygame.display.set_caption("Counting Game")
+    pygame.mouse.set_visible(False)
+    return screen, screen_w, screen_h
 
 
-def display_symbols(count, symbol):
-    """Display symbols in a scattered pattern."""
-    grid_width = 40
-    grid_height = 10
-    grid = [[' ' for _ in range(grid_width)] for _ in range(grid_height)]
-
-    placed = 0
-    attempts = 0
-    while placed < count and attempts < 1000:
-        x = random.randint(0, grid_width - 1)
-        y = random.randint(0, grid_height - 1)
-        if grid[y][x] == ' ':
-            grid[y][x] = symbol
-            placed += 1
-        attempts += 1
-
-    print('┌' + '─' * grid_width + '┐')
-    for row in grid:
-        print('│' + ''.join(row) + '│')
-    print('└' + '─' * grid_width + '┘')
+def draw_text(screen, text, x, y, font, color=BLACK, center=True):
+    """Render text on the screen."""
+    rendered = font.render(text, True, color)
+    rect = rendered.get_rect()
+    if center:
+        rect.center = (x, y)
+    else:
+        rect.topleft = (x, y)
+    screen.blit(rendered, rect)
+    return rect
 
 
-def play_counting_round(correct_so_far, total_needed, config):
-    """Play a single round of the counting game.
+def wait_for_key(screen):
+    """Wait for any key press. Returns the key event, or None if quit."""
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.KEYDOWN:
+                return event
+        pygame.time.wait(30)
+
+
+def get_text_input(screen, screen_w, screen_h, prompt, font_prompt, font_input, escape_code):
+    """Get text input from the user via Pygame keyboard events.
+
+    Returns:
+        tuple: (text, was_escape) - the entered text and whether escape code was typed
+    """
+    typed = ""
+    cursor_blink = 0
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return (typed, False)
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return (typed, typed.upper() == escape_code.upper())
+                elif event.key == pygame.K_BACKSPACE:
+                    typed = typed[:-1]
+                else:
+                    char = event.unicode
+                    if char and char.isprintable():
+                        typed += char
+
+        # Draw input area at the bottom
+        input_area_y = screen_h - 140
+        pygame.draw.rect(screen, WHITE, (0, input_area_y, screen_w, 140))
+        pygame.draw.line(screen, GRAY, (50, input_area_y), (screen_w - 50, input_area_y), 2)
+
+        # Prompt
+        draw_text(screen, prompt, screen_w // 2, input_area_y + 35, font_prompt, DARK_GRAY)
+
+        # Input box
+        box_w = 300
+        box_x = (screen_w - box_w) // 2
+        box_y = input_area_y + 60
+        pygame.draw.rect(screen, WHITE, (box_x, box_y, box_w, 50))
+        pygame.draw.rect(screen, BLACK, (box_x, box_y, box_w, 50), 3)
+
+        # Typed text
+        draw_text(screen, typed, screen_w // 2, box_y + 25, font_input, BLACK)
+
+        # Blinking cursor
+        cursor_blink = (cursor_blink + 1) % 60
+        if cursor_blink < 40:
+            text_surface = font_input.render(typed, True, BLACK)
+            cursor_x = screen_w // 2 + text_surface.get_width() // 2 + 3
+            pygame.draw.line(screen, BLACK, (cursor_x, box_y + 10), (cursor_x, box_y + 40), 2)
+
+        pygame.display.flip()
+        pygame.time.wait(16)
+
+
+def show_message_screen(screen, screen_w, screen_h, lines, bg_color=WHITE, wait=True):
+    """Show a message screen with centered text lines.
+
+    Args:
+        lines: list of (text, font, color) tuples
+        wait: if True, wait for key press
+    """
+    screen.fill(bg_color)
+    total_height = sum(font.get_height() + 15 for _, font, _ in lines)
+    start_y = (screen_h - total_height) // 2
+
+    y = start_y
+    for text, font, color in lines:
+        draw_text(screen, text, screen_w // 2, y, font, color)
+        y += font.get_height() + 15
+
+    pygame.display.flip()
+
+    if wait:
+        wait_for_key(screen)
+
+
+# ============== COUNTING GAME (FULLSCREEN) ==============
+
+def play_counting_round_fullscreen(screen, screen_w, screen_h, correct_so_far, total_needed, config):
+    """Play a single counting round in fullscreen Pygame.
 
     Returns:
         tuple: (result, details) where result is 'correct', 'wrong', or 'escape'
-               and details is a dict with count, symbol, user_answer
     """
-    clear_screen()
-    print(f"\n═══ {correct_so_far} of {total_needed} correct ═══\n")
-
     min_count = config.get("min_count", 5)
     max_count = config.get("max_count", 10)
     escape_code = config.get("escape_code", "LETMEOUT")
@@ -186,56 +268,239 @@ def play_counting_round(correct_so_far, total_needed, config):
     count = random.randint(min_count, max_count)
     symbol = random.choice(SYMBOLS)
 
-    display_symbols(count, symbol)
+    # Draw the round screen
+    screen.fill(WHITE)
 
-    print(f"\nHow many '{symbol}' symbols do you see?")
+    # Progress bar at top
+    font_progress = pygame.font.Font(None, 36)
+    progress_text = f"{correct_so_far} of {total_needed} correct"
+    draw_text(screen, progress_text, screen_w // 2, 40, font_progress, DARK_GRAY)
 
-    while True:
-        answer = input("Your answer: ").strip()
+    # Draw progress bar
+    bar_w = 300
+    bar_h = 12
+    bar_x = (screen_w - bar_w) // 2
+    bar_y = 60
+    pygame.draw.rect(screen, GRAY, (bar_x, bar_y, bar_w, bar_h), border_radius=6)
+    if total_needed > 0:
+        fill_w = int(bar_w * correct_so_far / total_needed)
+        if fill_w > 0:
+            pygame.draw.rect(screen, GREEN, (bar_x, bar_y, fill_w, bar_h), border_radius=6)
 
-        # Check for escape code
-        if answer.upper() == escape_code.upper():
-            return ('escape', {"count": count, "symbol": symbol, "user_answer": None})
+    # Scatter symbols on screen
+    font_symbol = pygame.font.Font(None, 72)
+    margin_x = 120
+    margin_top = 110
+    margin_bottom = 180
+    area_w = screen_w - 2 * margin_x
+    area_h = screen_h - margin_top - margin_bottom
 
-        try:
-            answer_num = int(answer)
-            break
-        except ValueError:
-            print("Please enter a number.")
+    # Place symbols at random positions without overlapping
+    positions = []
+    min_dist = 70  # Minimum distance between symbols
+    for _ in range(count):
+        attempts = 0
+        while attempts < 200:
+            x = random.randint(margin_x, margin_x + area_w)
+            y = random.randint(margin_top, margin_top + area_h)
+            # Check distance from existing symbols
+            too_close = False
+            for px, py in positions:
+                if math.hypot(x - px, y - py) < min_dist:
+                    too_close = True
+                    break
+            if not too_close:
+                positions.append((x, y))
+                break
+            attempts += 1
+        else:
+            # If couldn't find non-overlapping spot, place anyway
+            x = random.randint(margin_x, margin_x + area_w)
+            y = random.randint(margin_top, margin_top + area_h)
+            positions.append((x, y))
+
+    # Pick a random color for symbols this round
+    symbol_colors = [RED, BLUE, DARK_GREEN, ORANGE, (150, 50, 150)]
+    sym_color = random.choice(symbol_colors)
+
+    for (x, y) in positions:
+        draw_text(screen, symbol, x, y, font_symbol, sym_color)
+
+    # Question text
+    font_question = pygame.font.Font(None, 40)
+    font_input = pygame.font.Font(None, 48)
+
+    prompt = f"How many  {symbol}  do you see?"
+    draw_text(screen, prompt, screen_w // 2, screen_h - 130, font_question, BLACK)
+
+    pygame.display.flip()
+
+    # Get input
+    typed, was_escape = get_text_input(
+        screen, screen_w, screen_h,
+        "Type your answer and press Enter:",
+        pygame.font.Font(None, 30),
+        font_input,
+        escape_code
+    )
+
+    if was_escape:
+        return ('escape', {"count": count, "symbol": symbol, "user_answer": None})
+
+    # Try to parse the answer
+    try:
+        answer_num = int(typed.strip())
+    except ValueError:
+        answer_num = -1  # Will be marked wrong
 
     details = {"count": count, "symbol": symbol, "user_answer": answer_num}
 
+    # Show result
+    font_result = pygame.font.Font(None, 64)
+    font_detail = pygame.font.Font(None, 40)
+
     if answer_num == count:
-        print(f"\n✓ Correct! There were {count} symbols.")
+        screen.fill(WHITE)
+        draw_text(screen, "Correct!", screen_w // 2, screen_h // 2 - 40, font_result, GREEN)
+        draw_text(screen, f"There were {count} symbols.", screen_w // 2, screen_h // 2 + 30, font_detail, DARK_GRAY)
+        remaining = total_needed - (correct_so_far + 1)
+        if remaining > 0:
+            draw_text(screen, f"{remaining} more to go!", screen_w // 2, screen_h // 2 + 90, font_detail, DARK_GRAY)
+        draw_text(screen, "Press any key...", screen_w // 2, screen_h - 60, pygame.font.Font(None, 30), GRAY)
+        pygame.display.flip()
+        if remaining > 0:
+            wait_for_key(screen)
+        else:
+            pygame.time.wait(1200)
         return ('correct', details)
     else:
-        print(f"\n✗ Not quite. There were {count} symbols.")
+        screen.fill(WHITE)
+        draw_text(screen, "Not quite.", screen_w // 2, screen_h // 2 - 40, font_result, RED)
+        draw_text(screen, f"There were {count} symbols.", screen_w // 2, screen_h // 2 + 30, font_detail, DARK_GRAY)
+        draw_text(screen, "Press any key...", screen_w // 2, screen_h - 60, pygame.font.Font(None, 30), GRAY)
+        pygame.display.flip()
+        wait_for_key(screen)
         return ('wrong', details)
 
 
-# ============== DRAWING FUNCTIONS ==============
+def counting_game():
+    """Run the locked counting game in fullscreen - must get required_correct to exit."""
+    # Try to sync config from Google Drive first
+    sync_with_gdrive("pull")
+
+    # Load configuration
+    config = load_config()
+    total_needed = config.get("required_correct", 5)
+    min_count = config.get("min_count", 5)
+    max_count = config.get("max_count", 10)
+    auto_sync = config.get("auto_sync", False)
+
+    # Load stats and start a new session
+    stats = load_stats()
+    session = {
+        "start_time": datetime.now().isoformat(),
+        "end_time": None,
+        "config": {
+            "min_count": min_count,
+            "max_count": max_count,
+            "required_correct": total_needed
+        },
+        "completed": False,
+        "escaped": False,
+        "rounds": []
+    }
+
+    # Initialize fullscreen
+    screen, screen_w, screen_h = init_fullscreen()
+
+    # Title screen
+    font_title = pygame.font.Font(None, 72)
+    font_sub = pygame.font.Font(None, 40)
+    font_small = pygame.font.Font(None, 30)
+
+    show_message_screen(screen, screen_w, screen_h, [
+        ("SYMBOL COUNTING GAME", font_title, BLACK),
+        ("", font_small, WHITE),
+        ("Count the symbols on each screen!", font_sub, DARK_GRAY),
+        (f"Get {total_needed} correct to finish!", font_sub, DARK_GRAY),
+        (f"(counting {min_count} to {max_count} symbols)", font_small, GRAY),
+        ("", font_small, WHITE),
+        ("Press any key to start...", font_small, GRAY),
+    ])
+
+    correct = 0
+
+    while correct < total_needed:
+        result, details = play_counting_round_fullscreen(
+            screen, screen_w, screen_h, correct, total_needed, config
+        )
+
+        if result == 'escape':
+            session["escaped"] = True
+            session["end_time"] = datetime.now().isoformat()
+            stats["total_sessions"] += 1
+            stats["sessions"].append(session)
+            save_stats(stats)
+            if auto_sync:
+                sync_with_gdrive("push")
+
+            show_message_screen(screen, screen_w, screen_h, [
+                ("Escape code accepted.", font_sub, DARK_GRAY),
+                ("Exiting...", font_small, GRAY),
+            ])
+            pygame.quit()
+            return
+
+        was_correct = (result == 'correct')
+        log_round(session, details["count"], details["user_answer"], was_correct, details["symbol"])
+
+        if was_correct:
+            correct += 1
+            stats["total_correct"] += 1
+        else:
+            stats["total_wrong"] += 1
+
+        stats["total_rounds"] += 1
+        save_stats(stats)
+
+    # Mark session complete
+    session["completed"] = True
+    session["end_time"] = datetime.now().isoformat()
+    stats["total_sessions"] += 1
+    stats["sessions"].append(session)
+    save_stats(stats)
+    if auto_sync:
+        sync_with_gdrive("push")
+
+    # Victory screen
+    font_big = pygame.font.Font(None, 96)
+    show_message_screen(screen, screen_w, screen_h, [
+        ("YOU DID IT!", font_big, GREEN),
+        ("", font_sub, WHITE),
+        (f"You got {total_needed} correct answers!", font_sub, DARK_GRAY),
+        ("Great counting!", font_sub, DARK_GRAY),
+        ("", font_small, WHITE),
+        ("Press any key to exit...", font_small, GRAY),
+    ])
+
+    pygame.quit()
+
+
+# ============== DRAWING FUNCTIONS (for spelling game) ==============
 
 def draw_dog(screen, cx, cy):
     """Draw a simple dog."""
-    # Body
     pygame.draw.ellipse(screen, BROWN, (cx - 60, cy - 20, 120, 70))
-    # Head
     pygame.draw.circle(screen, BROWN, (cx - 70, cy - 30), 40)
-    # Ears
     pygame.draw.ellipse(screen, BROWN, (cx - 120, cy - 70, 30, 50))
     pygame.draw.ellipse(screen, BROWN, (cx - 50, cy - 70, 30, 50))
-    # Eyes
     pygame.draw.circle(screen, WHITE, (cx - 85, cy - 40), 12)
     pygame.draw.circle(screen, WHITE, (cx - 55, cy - 40), 12)
     pygame.draw.circle(screen, BLACK, (cx - 85, cy - 40), 6)
     pygame.draw.circle(screen, BLACK, (cx - 55, cy - 40), 6)
-    # Nose
     pygame.draw.circle(screen, BLACK, (cx - 70, cy - 15), 8)
-    # Mouth
     pygame.draw.arc(screen, BLACK, (cx - 85, cy - 20, 30, 20), 3.14, 0, 2)
-    # Tail
     pygame.draw.arc(screen, BROWN, (cx + 40, cy - 40, 40, 60), 0, 2.5, 8)
-    # Legs
     pygame.draw.rect(screen, BROWN, (cx - 45, cy + 40, 15, 40))
     pygame.draw.rect(screen, BROWN, (cx - 10, cy + 40, 15, 40))
     pygame.draw.rect(screen, BROWN, (cx + 20, cy + 40, 15, 40))
@@ -244,55 +509,41 @@ def draw_dog(screen, cx, cy):
 
 def draw_cat(screen, cx, cy):
     """Draw a simple cat."""
-    # Body
     pygame.draw.ellipse(screen, ORANGE, (cx - 50, cy - 10, 100, 70))
-    # Head
     pygame.draw.circle(screen, ORANGE, (cx, cy - 50), 45)
-    # Ears (triangles)
     pygame.draw.polygon(screen, ORANGE, [(cx - 40, cy - 80), (cx - 25, cy - 120), (cx - 10, cy - 80)])
     pygame.draw.polygon(screen, ORANGE, [(cx + 40, cy - 80), (cx + 25, cy - 120), (cx + 10, cy - 80)])
     pygame.draw.polygon(screen, PINK, [(cx - 35, cy - 85), (cx - 25, cy - 110), (cx - 15, cy - 85)])
     pygame.draw.polygon(screen, PINK, [(cx + 35, cy - 85), (cx + 25, cy - 110), (cx + 15, cy - 85)])
-    # Eyes
     pygame.draw.ellipse(screen, GREEN, (cx - 25, cy - 60, 18, 25))
     pygame.draw.ellipse(screen, GREEN, (cx + 7, cy - 60, 18, 25))
     pygame.draw.ellipse(screen, BLACK, (cx - 19, cy - 55, 6, 18))
     pygame.draw.ellipse(screen, BLACK, (cx + 13, cy - 55, 6, 18))
-    # Nose
     pygame.draw.polygon(screen, PINK, [(cx, cy - 35), (cx - 8, cy - 25), (cx + 8, cy - 25)])
-    # Whiskers
     for i in [-1, 1]:
         pygame.draw.line(screen, BLACK, (cx + i * 10, cy - 28), (cx + i * 50, cy - 35), 2)
         pygame.draw.line(screen, BLACK, (cx + i * 10, cy - 25), (cx + i * 50, cy - 25), 2)
         pygame.draw.line(screen, BLACK, (cx + i * 10, cy - 22), (cx + i * 50, cy - 15), 2)
-    # Tail
     pygame.draw.arc(screen, ORANGE, (cx + 30, cy - 20, 60, 80), 4.5, 1.5, 10)
 
 
 def draw_car(screen, cx, cy):
     """Draw a simple car."""
-    # Body
     pygame.draw.rect(screen, RED, (cx - 80, cy - 20, 160, 50), border_radius=10)
-    # Top/cabin
     pygame.draw.rect(screen, RED, (cx - 40, cy - 60, 80, 45), border_radius=8)
-    # Windows
     pygame.draw.rect(screen, LIGHT_BLUE, (cx - 35, cy - 55, 30, 30), border_radius=3)
     pygame.draw.rect(screen, LIGHT_BLUE, (cx + 5, cy - 55, 30, 30), border_radius=3)
-    # Wheels
     pygame.draw.circle(screen, BLACK, (cx - 45, cy + 30), 25)
     pygame.draw.circle(screen, GRAY, (cx - 45, cy + 30), 12)
     pygame.draw.circle(screen, BLACK, (cx + 45, cy + 30), 25)
     pygame.draw.circle(screen, GRAY, (cx + 45, cy + 30), 12)
-    # Headlights
     pygame.draw.circle(screen, YELLOW, (cx + 75, cy), 10)
     pygame.draw.circle(screen, RED, (cx - 75, cy), 8)
 
 
 def draw_tree(screen, cx, cy):
     """Draw a simple tree."""
-    # Trunk
     pygame.draw.rect(screen, BROWN, (cx - 20, cy, 40, 80))
-    # Foliage (three circles)
     pygame.draw.circle(screen, DARK_GREEN, (cx, cy - 60), 60)
     pygame.draw.circle(screen, GREEN, (cx - 45, cy - 20), 45)
     pygame.draw.circle(screen, GREEN, (cx + 45, cy - 20), 45)
@@ -301,48 +552,34 @@ def draw_tree(screen, cx, cy):
 
 def draw_ball(screen, cx, cy):
     """Draw a colorful beach ball."""
-    # Main ball
     pygame.draw.circle(screen, RED, (cx, cy), 70)
-    # Stripes
     pygame.draw.arc(screen, BLUE, (cx - 70, cy - 70, 140, 140), 0.5, 1.5, 70)
     pygame.draw.arc(screen, YELLOW, (cx - 70, cy - 70, 140, 140), 2.0, 3.0, 70)
     pygame.draw.arc(screen, GREEN, (cx - 70, cy - 70, 140, 140), 3.5, 4.5, 70)
     pygame.draw.arc(screen, WHITE, (cx - 70, cy - 70, 140, 140), 5.0, 6.0, 70)
-    # Outline
     pygame.draw.circle(screen, BLACK, (cx, cy), 70, 3)
-    # Shine highlight
     pygame.draw.circle(screen, WHITE, (cx - 25, cy - 30), 15)
 
 
 def draw_apple(screen, cx, cy):
     """Draw a red apple."""
-    # Main apple body
     pygame.draw.circle(screen, RED, (cx, cy), 60)
     pygame.draw.circle(screen, RED, (cx - 25, cy + 10), 50)
     pygame.draw.circle(screen, RED, (cx + 25, cy + 10), 50)
-    # Stem
     pygame.draw.rect(screen, BROWN, (cx - 4, cy - 75, 8, 25))
-    # Leaf
     pygame.draw.ellipse(screen, GREEN, (cx + 5, cy - 75, 35, 18))
-    # Shine highlight
     pygame.draw.circle(screen, (255, 200, 200), (cx - 20, cy - 25), 12)
 
 
 def draw_fish(screen, cx, cy):
     """Draw a colorful fish."""
-    # Body
     pygame.draw.ellipse(screen, ORANGE, (cx - 70, cy - 35, 120, 70))
-    # Tail
     pygame.draw.polygon(screen, ORANGE, [(cx + 40, cy), (cx + 90, cy - 40), (cx + 90, cy + 40)])
-    # Fins
     pygame.draw.polygon(screen, YELLOW, [(cx - 20, cy - 35), (cx, cy - 70), (cx + 20, cy - 35)])
     pygame.draw.polygon(screen, YELLOW, [(cx - 20, cy + 35), (cx, cy + 60), (cx + 20, cy + 35)])
-    # Eye
     pygame.draw.circle(screen, WHITE, (cx - 35, cy - 5), 15)
     pygame.draw.circle(screen, BLACK, (cx - 35, cy - 5), 7)
-    # Mouth
     pygame.draw.arc(screen, BLACK, (cx - 65, cy + 5, 20, 15), 3.14, 0, 3)
-    # Scales pattern
     pygame.draw.arc(screen, (200, 120, 40), (cx - 30, cy - 20, 30, 30), 0, 3.14, 2)
     pygame.draw.arc(screen, (200, 120, 40), (cx, cy - 15, 30, 30), 0, 3.14, 2)
     pygame.draw.arc(screen, (200, 120, 40), (cx - 15, cy + 5, 30, 30), 0, 3.14, 2)
@@ -350,26 +587,20 @@ def draw_fish(screen, cx, cy):
 
 def draw_book(screen, cx, cy):
     """Draw an open book."""
-    # Left page
     pygame.draw.rect(screen, WHITE, (cx - 90, cy - 50, 80, 100))
     pygame.draw.rect(screen, BLACK, (cx - 90, cy - 50, 80, 100), 2)
-    # Right page
     pygame.draw.rect(screen, WHITE, (cx + 10, cy - 50, 80, 100))
     pygame.draw.rect(screen, BLACK, (cx + 10, cy - 50, 80, 100), 2)
-    # Spine
     pygame.draw.rect(screen, RED, (cx - 10, cy - 55, 20, 110))
     pygame.draw.rect(screen, (150, 30, 30), (cx - 10, cy - 55, 20, 110), 2)
-    # Text lines on left page
     for i in range(5):
         pygame.draw.line(screen, GRAY, (cx - 80, cy - 35 + i * 18), (cx - 20, cy - 35 + i * 18), 2)
-    # Text lines on right page
     for i in range(5):
         pygame.draw.line(screen, GRAY, (cx + 20, cy - 35 + i * 18), (cx + 80, cy - 35 + i * 18), 2)
 
 
 def draw_sun(screen, cx, cy):
     """Draw a simple sun."""
-    # Rays
     for angle in range(0, 360, 30):
         rad = math.radians(angle)
         x1 = cx + int(60 * math.cos(rad))
@@ -377,10 +608,8 @@ def draw_sun(screen, cx, cy):
         x2 = cx + int(100 * math.cos(rad))
         y2 = cy + int(100 * math.sin(rad))
         pygame.draw.line(screen, YELLOW, (x1, y1), (x2, y2), 8)
-    # Center
     pygame.draw.circle(screen, YELLOW, (cx, cy), 55)
     pygame.draw.circle(screen, ORANGE, (cx, cy), 55, 5)
-    # Face
     pygame.draw.circle(screen, BLACK, (cx - 18, cy - 10), 6)
     pygame.draw.circle(screen, BLACK, (cx + 18, cy - 10), 6)
     pygame.draw.arc(screen, BLACK, (cx - 20, cy + 5, 40, 25), 3.14, 0, 3)
@@ -388,11 +617,8 @@ def draw_sun(screen, cx, cy):
 
 def draw_moon(screen, cx, cy):
     """Draw a crescent moon."""
-    # Main moon circle
     pygame.draw.circle(screen, YELLOW, (cx, cy), 70)
-    # Cut out circle to make crescent
     pygame.draw.circle(screen, WHITE, (cx + 40, cy - 20), 55)
-    # Add some crater details
     pygame.draw.circle(screen, (230, 200, 50), (cx - 30, cy - 20), 8)
     pygame.draw.circle(screen, (230, 200, 50), (cx - 45, cy + 20), 6)
     pygame.draw.circle(screen, (230, 200, 50), (cx - 20, cy + 35), 5)
@@ -400,13 +626,10 @@ def draw_moon(screen, cx, cy):
 
 def draw_star(screen, cx, cy):
     """Draw a star."""
-    # 5-pointed star
     points = []
     for i in range(5):
-        # Outer points
         angle = math.radians(i * 72 - 90)
         points.append((cx + int(80 * math.cos(angle)), cy + int(80 * math.sin(angle))))
-        # Inner points
         angle = math.radians(i * 72 - 90 + 36)
         points.append((cx + int(35 * math.cos(angle)), cy + int(35 * math.sin(angle))))
     pygame.draw.polygon(screen, YELLOW, points)
@@ -415,39 +638,32 @@ def draw_star(screen, cx, cy):
 
 def draw_milk(screen, cx, cy):
     """Draw a 3D milk carton with glass."""
-    # Carton - right side (3D effect)
     pygame.draw.polygon(screen, (220, 220, 220), [
         (cx - 10, cy - 60), (cx + 20, cy - 70), (cx + 20, cy + 50), (cx - 10, cy + 60)
     ])
-    # Carton - front face
     pygame.draw.rect(screen, WHITE, (cx - 70, cy - 60, 60, 120))
     pygame.draw.rect(screen, BLUE, (cx - 70, cy - 60, 60, 120), 3)
-    # Carton - top (3D)
     pygame.draw.polygon(screen, (240, 240, 240), [
         (cx - 70, cy - 60), (cx - 40, cy - 90), (cx - 10, cy - 60)
     ])
     pygame.draw.polygon(screen, BLUE, [
         (cx - 70, cy - 60), (cx - 40, cy - 90), (cx - 10, cy - 60)
     ], 2)
-    # Top fold peak (3D)
     pygame.draw.polygon(screen, (230, 230, 230), [
         (cx - 40, cy - 90), (cx - 10, cy - 60), (cx + 20, cy - 70), (cx - 10, cy - 100)
     ])
     pygame.draw.polygon(screen, BLUE, [
         (cx - 40, cy - 90), (cx - 10, cy - 60), (cx + 20, cy - 70), (cx - 10, cy - 100)
     ], 2)
-    # Cow spots on front
     pygame.draw.ellipse(screen, BLACK, (cx - 60, cy - 30, 18, 12))
     pygame.draw.ellipse(screen, BLACK, (cx - 40, cy - 5, 20, 14))
     pygame.draw.ellipse(screen, BLACK, (cx - 55, cy + 25, 15, 10))
-    # Glass of milk to the right
     pygame.draw.polygon(screen, LIGHT_BLUE, [
         (cx + 50, cy - 10), (cx + 110, cy - 10), (cx + 105, cy + 60), (cx + 55, cy + 60)
     ])
     pygame.draw.polygon(screen, (100, 180, 220), [
         (cx + 50, cy - 10), (cx + 110, cy - 10), (cx + 105, cy + 60), (cx + 55, cy + 60)
     ], 3)
-    # Milk in glass
     pygame.draw.polygon(screen, WHITE, [
         (cx + 53, cy + 5), (cx + 107, cy + 5), (cx + 104, cy + 57), (cx + 56, cy + 57)
     ])
@@ -455,54 +671,39 @@ def draw_milk(screen, cx, cy):
 
 def draw_bed(screen, cx, cy):
     """Draw a detailed bed."""
-    # Headboard (decorative)
     pygame.draw.rect(screen, BROWN, (cx - 100, cy - 80, 25, 130))
     pygame.draw.rect(screen, (100, 60, 30), (cx - 100, cy - 80, 25, 130), 3)
-    pygame.draw.circle(screen, BROWN, (cx - 88, cy - 80), 12)  # Decorative top
-    # Footboard
+    pygame.draw.circle(screen, BROWN, (cx - 88, cy - 80), 12)
     pygame.draw.rect(screen, BROWN, (cx + 75, cy - 40, 25, 90))
     pygame.draw.rect(screen, (100, 60, 30), (cx + 75, cy - 40, 25, 90), 3)
-    pygame.draw.circle(screen, BROWN, (cx + 88, cy - 40), 12)  # Decorative top
-    # Bed frame base
+    pygame.draw.circle(screen, BROWN, (cx + 88, cy - 40), 12)
     pygame.draw.rect(screen, (120, 80, 50), (cx - 75, cy + 35, 150, 15))
-    # Mattress
     pygame.draw.rect(screen, WHITE, (cx - 75, cy - 25, 150, 60))
     pygame.draw.rect(screen, (200, 200, 200), (cx - 75, cy - 25, 150, 60), 2)
-    # Pillow
     pygame.draw.ellipse(screen, WHITE, (cx - 70, cy - 45, 55, 30))
     pygame.draw.ellipse(screen, (180, 180, 180), (cx - 70, cy - 45, 55, 30), 2)
-    # Second pillow
     pygame.draw.ellipse(screen, (250, 250, 250), (cx - 55, cy - 40, 50, 25))
     pygame.draw.ellipse(screen, (180, 180, 180), (cx - 55, cy - 40, 50, 25), 2)
-    # Blanket with fold detail
     pygame.draw.rect(screen, RED, (cx - 75, cy + 5, 150, 30))
     pygame.draw.rect(screen, (180, 50, 50), (cx - 75, cy + 5, 150, 30), 2)
-    # Blanket fold line
     pygame.draw.line(screen, (150, 40, 40), (cx - 75, cy + 5), (cx + 75, cy + 5), 3)
-    # Sheet showing
     pygame.draw.rect(screen, WHITE, (cx - 75, cy - 5, 150, 12))
-    # Legs
     pygame.draw.rect(screen, BROWN, (cx - 80, cy + 45, 12, 25))
     pygame.draw.rect(screen, BROWN, (cx + 68, cy + 45, 12, 25))
 
 
 def draw_house(screen, cx, cy):
     """Draw a simple house."""
-    # Main building
     pygame.draw.rect(screen, BEIGE, (cx - 70, cy - 30, 140, 100))
-    # Roof
     pygame.draw.polygon(screen, RED, [(cx - 85, cy - 30), (cx, cy - 100), (cx + 85, cy - 30)])
-    # Door
     pygame.draw.rect(screen, BROWN, (cx - 20, cy + 10, 40, 60))
     pygame.draw.circle(screen, YELLOW, (cx + 12, cy + 40), 5)
-    # Windows
     pygame.draw.rect(screen, LIGHT_BLUE, (cx - 55, cy - 10, 30, 30))
     pygame.draw.rect(screen, LIGHT_BLUE, (cx + 25, cy - 10, 30, 30))
     pygame.draw.line(screen, WHITE, (cx - 40, cy - 10), (cx - 40, cy + 20), 2)
     pygame.draw.line(screen, WHITE, (cx - 55, cy + 5), (cx - 25, cy + 5), 2)
     pygame.draw.line(screen, WHITE, (cx + 40, cy - 10), (cx + 40, cy + 20), 2)
     pygame.draw.line(screen, WHITE, (cx + 25, cy + 5), (cx + 55, cy + 5), 2)
-    # Chimney
     pygame.draw.rect(screen, BROWN, (cx + 40, cy - 85, 25, 40))
 
 
@@ -529,20 +730,16 @@ def show_drawing(word):
     """Display a drawn image using Pygame."""
     pygame.init()
 
-    # Window size
     width, height = 400, 350
     screen = pygame.display.set_mode((width, height))
     pygame.display.set_caption("What is this?")
 
-    # Draw background
     screen.fill(WHITE)
 
-    # Draw the image
     cx, cy = width // 2, height // 2 - 20
     if word in DRAW_FUNCTIONS:
         DRAW_FUNCTIONS[word](screen, cx, cy)
 
-    # Instructions text
     font = pygame.font.Font(None, 24)
     text = font.render("Press any key or close window when ready", True, BLACK)
     text_rect = text.get_rect(center=(width // 2, height - 20))
@@ -550,7 +747,6 @@ def show_drawing(word):
 
     pygame.display.flip()
 
-    # Wait for user
     waiting = True
     while waiting:
         for event in pygame.event.get():
@@ -563,6 +759,11 @@ def show_drawing(word):
     return True
 
 
+def clear_screen():
+    """Clear the terminal screen."""
+    os.system('clear' if os.name == 'posix' else 'cls')
+
+
 def play_spelling_round(round_num, target_correct, available_words):
     """Play a single round of the spelling game."""
     clear_screen()
@@ -572,10 +773,8 @@ def play_spelling_round(round_num, target_correct, available_words):
 
     print("Look at the picture window and spell what you see!\n")
 
-    # Show drawing
     show_drawing(word)
 
-    # Get answer
     answer = input("\nWhat was it? Type your answer: ").strip().upper()
 
     if answer == word:
@@ -586,114 +785,8 @@ def play_spelling_round(round_num, target_correct, available_words):
         return False, word
 
 
-def counting_game():
-    """Run the locked counting game - must get required_correct to exit."""
-    # Try to sync config from Google Drive first
-    sync_with_gdrive("pull")
-
-    # Load configuration
-    config = load_config()
-    total_needed = config.get("required_correct", 5)
-    min_count = config.get("min_count", 5)
-    max_count = config.get("max_count", 10)
-    auto_sync = config.get("auto_sync", False)
-
-    # Load stats and start a new session
-    stats = load_stats()
-    session = {
-        "start_time": datetime.now().isoformat(),
-        "end_time": None,
-        "config": {
-            "min_count": min_count,
-            "max_count": max_count,
-            "required_correct": total_needed
-        },
-        "completed": False,
-        "escaped": False,
-        "rounds": []
-    }
-
-    clear_screen()
-    print("╔════════════════════════════════════════╗")
-    print("║      SYMBOL COUNTING GAME              ║")
-    print("║                                        ║")
-    print("║  Count the symbols on each screen!    ║")
-    print(f"║  Get {total_needed} correct to finish!             ║")
-    print(f"║  (counting {min_count} to {max_count} symbols)           ║")
-    print("╚════════════════════════════════════════╝")
-    print("\nPress Enter to start...")
-    input()
-
-    correct = 0
-
-    while correct < total_needed:
-        result, details = play_counting_round(correct, total_needed, config)
-
-        if result == 'escape':
-            # Log escape
-            session["escaped"] = True
-            session["end_time"] = datetime.now().isoformat()
-            stats["total_sessions"] += 1
-            stats["sessions"].append(session)
-            save_stats(stats)
-            if auto_sync:
-                print("\nSaving progress...")
-                sync_with_gdrive("push")
-
-            clear_screen()
-            print("\n🔓 Escape code accepted. Exiting...\n")
-            return
-
-        # Log this round
-        was_correct = (result == 'correct')
-        log_round(session, details["count"], details["user_answer"], was_correct, details["symbol"])
-
-        if was_correct:
-            correct += 1
-            stats["total_correct"] += 1
-            if correct < total_needed:
-                print(f"\n{total_needed - correct} more to go!")
-        else:
-            stats["total_wrong"] += 1
-
-        stats["total_rounds"] += 1
-        save_stats(stats)  # Save after each round
-
-        # Only ask to continue if not finished yet
-        if correct < total_needed:
-            input("\nPress Enter to continue...")
-
-    # Mark session complete
-    session["completed"] = True
-    session["end_time"] = datetime.now().isoformat()
-    stats["total_sessions"] += 1
-    stats["sessions"].append(session)
-    save_stats(stats)
-    if auto_sync:
-        print("\nSaving progress...")
-        sync_with_gdrive("push")
-
-    # Victory screen
-    clear_screen()
-    print("\n╔════════════════════════════════════════╗")
-    print("║         🎉 YOU DID IT! 🎉              ║")
-    print("║                                        ║")
-    print(f"║      You got {total_needed} correct answers!       ║")
-    print("║                                        ║")
-    print("║          Great counting!              ║")
-    print("╚════════════════════════════════════════╝")
-    print()
-
-
 def spelling_game():
     """Run the spelling game - need 3 correct to finish."""
-    if not PYGAME_AVAILABLE:
-        print("\n❌ Pygame is not installed!")
-        print("Install it with: sudo apt install python3-pygame")
-        print("Or: pip3 install pygame")
-        input("\nPress Enter to return to menu...")
-        return
-
     clear_screen()
     print("╔════════════════════════════════════════╗")
     print("║        SPELLING GAME                   ║")
@@ -713,7 +806,6 @@ def spelling_game():
     while correct < target:
         round_num += 1
 
-        # Filter out recently used words
         word_pool = [w for w in SPELLING_WORDS if w not in used_words[-3:]]
         if not word_pool:
             word_pool = SPELLING_WORDS
@@ -741,10 +833,8 @@ def spelling_game():
 
 
 def main():
-    """Run the counting game directly (locked mode)."""
+    """Run the counting game directly (locked mode, fullscreen)."""
     counting_game()
-    clear_screen()
-    print("\nThanks for playing! Goodbye!\n")
 
 
 # Keep spelling_game available for future use but not in main menu
@@ -763,10 +853,7 @@ def main_with_menu():
         print("║                                        ║")
         print("╚════════════════════════════════════════╝")
 
-        if PYGAME_AVAILABLE:
-            print(f"\n  ✓ Pygame ready - all {len(SPELLING_WORDS)} pictures available!")
-        else:
-            print("\n  ⚠ Pygame not installed (needed for spelling)")
+        print(f"\n  ✓ Pygame ready - all {len(SPELLING_WORDS)} pictures available!")
 
         choice = input("\nEnter 1, 2, or 3: ").strip()
 
