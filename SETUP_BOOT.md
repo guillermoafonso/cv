@@ -1,68 +1,65 @@
-# Setup: Counting Game at Boot
+# Setup: Counting Game for Child User
 
-This makes the counting game run automatically when the Raspberry Pi
-starts up. The child must complete the game before the desktop loads.
+The counting game runs automatically when a "child" user logs in.
+The child must complete the game before they can use the desktop.
+Your own user account is not affected.
 
 ## Setup Steps
 
-### 1. Make the boot script executable
+### 1. Create the child user
 
 ```bash
-chmod +x ~/cv/boot_game.sh
+sudo adduser child
 ```
 
-### 2. Edit the service file with your username
+Pick a simple password (or one the child knows). When it asks for
+Full Name etc., you can just press Enter to skip.
 
-If your Pi username is NOT `pi`, edit `counting-game.service` and
-replace both instances of `pi` with your actual username:
+### 2. Clone the game into the child's home folder
 
 ```bash
-nano ~/cv/counting-game.service
+sudo cp -r ~/cv /home/child/cv
+sudo chown -R child:child /home/child/cv
 ```
 
-Change these two lines:
-- `ExecStart=/home/pi/cv/boot_game.sh` → `/home/YOURUSERNAME/cv/boot_game.sh`
-- `User=pi` → `User=YOURUSERNAME`
-
-### 3. Install the systemd service
+### 3. Set up autostart for the child user
 
 ```bash
-sudo cp ~/cv/counting-game.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable counting-game.service
+sudo mkdir -p /home/child/.config/autostart
+sudo cp ~/cv/counting-game-autostart.desktop /home/child/.config/autostart/
+sudo chown -R child:child /home/child/.config
 ```
 
-### 4. Reboot to test
+### 4. Test it
 
-```bash
-sudo reboot
-```
+Log out of your account, and log in as `child`. The counting game
+should appear fullscreen after a couple of seconds. After completing
+it, the desktop is usable.
 
-The counting game should appear before the desktop loads.
+## How It Works
+
+- When `child` logs in, the desktop starts normally
+- The autostart entry launches the counting game fullscreen
+- The game locks the screen (no quit button, hidden cursor)
+- After getting the required correct answers, the game exits
+- The child can then use the desktop
+
+Your own account is completely unaffected.
 
 ## How to Disable
 
-If you want to stop the game from running at boot:
+Delete the autostart file:
+
+```bash
+sudo rm /home/child/.config/autostart/counting-game-autostart.desktop
+```
+
+## Removing the Old systemd Service
+
+If you set up the systemd service from before, disable it:
 
 ```bash
 sudo systemctl disable counting-game.service
-sudo reboot
+sudo rm /etc/systemd/system/counting-game.service
+sudo systemctl daemon-reload
 ```
-
-## How to Re-enable
-
-```bash
-sudo systemctl enable counting-game.service
-sudo reboot
-```
-
-## Troubleshooting
-
-Check if the service ran correctly:
-```bash
-sudo systemctl status counting-game.service
-sudo journalctl -u counting-game.service
-```
-
-If the game doesn't display, the video driver may need changing.
-Check the log output above for errors.
