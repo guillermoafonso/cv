@@ -1,0 +1,12 @@
+[Unit]
+Description=Screen Timer - Parental Control Overlay
+After=graphical.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/screen-timer
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=graphical.target

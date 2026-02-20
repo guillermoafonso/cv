@@ -1,0 +1,6 @@
+{
+    "daily_minutes": 30,
+    "warn_seconds": 60,
+    "watch_processes": ["minetest"],
+    "watch_user": "CHANGEME"
+}
