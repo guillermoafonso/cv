@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yearly Timeline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #ffffff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .timeline-container {
+      width: 100%;
+      max-width: 900px;
+      padding: 60px 40px 40px;
+    }
+
+    /* ── The horizontal bar ── */
+    .timeline-track {
+      position: relative;
+      height: 6px;
+      background: #d1d5db;
+      border-radius: 3px;
+      margin: 0 30px;
+    }
+
+    /* Filled portion up to "today" */
+    .timeline-progress {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      background: linear-gradient(90deg, #2563eb, #3b82f6);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    /* ── Milestone dots ── */
+    .milestone {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+    }
+
+    .milestone-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #d1d5db;
+      border: 3px solid #ffffff;
+      box-shadow: 0 0 0 2px #d1d5db;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+
+    .milestone.reached .milestone-dot {
+      background: #2563eb;
+      box-shadow: 0 0 0 2px #2563eb;
+    }
+
+    /* Labels above */
+    .milestone-label {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .milestone-date {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .milestone-title {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 2px;
+      white-space: normal;
+      width: 130px;
+      text-align: center;
+      margin-left: -65px;
+      left: 50%;
+      position: relative;
+    }
+
+    /* ── "Today" marker ── */
+    .today-marker {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .today-arrow {
+      width: 0; height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 12px solid #ef4444;
+      margin-bottom: -2px;
+    }
+
+    .today-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ef4444;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 2px #ef4444, 0 0 8px rgba(239,68,68,0.4);
+    }
+
+    .today-label {
+      position: absolute;
+      bottom: 22px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #ef4444;
+      white-space: nowrap;
+      background: #fff;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid #fecaca;
+    }
+
+    /* ── Phase spans below the track ── */
+    .phases {
+      position: relative;
+      height: 36px;
+      margin: 0 30px;
+    }
+
+    .phase-bar {
+      position: absolute;
+      top: 10px;
+      height: 20px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.3px;
+    }
+
+    .phase-inquiry   { background: #3b82f6; }
+    .phase-action    { background: #8b5cf6; }
+    .phase-reflection { background: #10b981; }
+  </style>
+</head>
+<body>
+
+<div class="timeline-container">
+  <div class="timeline-track" id="track">
+    <div class="timeline-progress" id="progress"></div>
+    <!-- milestones and today-marker are injected by JS -->
+  </div>
+  <div class="phases" id="phases"></div>
+</div>
+
+<script>
+  // =====================================================
+  //  EDIT THESE to change milestones, labels, or year
+  // =====================================================
+  const YEAR = new Date().getFullYear();
+
+  const MILESTONES = [
+    { month: 1,  day: 6,  label: "Start of the Inquiry phase" },
+    { month: 5,  day: 15, label: "End of Inquiry phase, start the Action phase" },
+    { month: 7,  day: 1,  label: "Final reflection" }
+  ];
+
+  // Phases shown below the track (colour classes defined in CSS)
+  const PHASES = [
+    { startIndex: 0, endIndex: 1, name: "Inquiry",    cssClass: "phase-inquiry" },
+    { startIndex: 1, endIndex: 2, name: "Action",     cssClass: "phase-action" },
+    { startIndex: 2, endIndex: 2, name: "Reflection", cssClass: "phase-reflection" }
+  ];
+  // =====================================================
+
+  // Convert a milestone {month, day} to a day-of-year number (1-based)
+  function dayOfYear(m, d) {
+    const date = new Date(YEAR, m - 1, d);
+    const start = new Date(YEAR, 0, 1);
+    return Math.floor((date - start) / 86400000) + 1;
+  }
+
+  const totalDays = (new Date(YEAR, 11, 31) - new Date(YEAR, 0, 1)) / 86400000 + 1;
+
+  // Percentage position along the track for a given day-of-year
+  function pct(doy) {
+    return ((doy - 1) / (totalDays - 1)) * 100;
+  }
+
+  // Nice date string
+  function fmtDate(m, d) {
+    const dt = new Date(YEAR, m - 1, d);
+    return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  }
+
+  const track  = document.getElementById("track");
+  const prog   = document.getElementById("progress");
+  const phases = document.getElementById("phases");
+
+  const todayDOY = dayOfYear(new Date().getMonth() + 1, new Date().getDate());
+
+  // ── Render milestones ──
+  MILESTONES.forEach((ms, i) => {
+    const doy = dayOfYear(ms.month, ms.day);
+    const p   = pct(doy);
+    const reached = todayDOY >= doy;
+
+    const el = document.createElement("div");
+    el.className = "milestone" + (reached ? " reached" : "");
+    el.style.left = p + "%";
+    el.innerHTML =
+      '<div class="milestone-dot"></div>' +
+      '<div class="milestone-label">' +
+        '<div class="milestone-date">' + fmtDate(ms.month, ms.day) + '</div>' +
+        '<div class="milestone-title">' + ms.label + '</div>' +
+      '</div>';
+    track.appendChild(el);
+  });
+
+  // ── Render "today" marker ──
+  const todayPct = pct(todayDOY);
+  prog.style.width = todayPct + "%";
+
+  const marker = document.createElement("div");
+  marker.className = "today-marker";
+  marker.style.left = todayPct + "%";
+  marker.innerHTML =
+    '<div class="today-label">Today</div>' +
+    '<div class="today-arrow"></div>' +
+    '<div class="today-dot"></div>';
+  track.appendChild(marker);
+
+  // ── Render phase bars ──
+  PHASES.forEach(ph => {
+    const startDOY = dayOfYear(MILESTONES[ph.startIndex].month, MILESTONES[ph.startIndex].day);
+    let endDOY;
+    if (ph.startIndex === ph.endIndex) {
+      // A phase that sits at a single milestone – give it a small visual width
+      endDOY = Math.min(startDOY + 30, totalDays);
+    } else {
+      endDOY = dayOfYear(MILESTONES[ph.endIndex].month, MILESTONES[ph.endIndex].day);
+    }
+    const bar = document.createElement("div");
+    bar.className = "phase-bar " + ph.cssClass;
+    bar.style.left  = pct(startDOY) + "%";
+    bar.style.width = (pct(endDOY) - pct(startDOY)) + "%";
+    bar.textContent  = ph.name;
+    phases.appendChild(bar);
+  });
+</script>
+
+</body>
+</html>
