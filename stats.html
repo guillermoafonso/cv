@@ -244,7 +244,13 @@
         }
 
         function renderStats(data) {
-            const sessions = data.sessions.filter(s => s.rounds && s.rounds.length > 0);
+            // Only include sessions after March 16, 2026
+            const cutoffDate = new Date('2026-03-16T00:00:00');
+            const sessions = data.sessions.filter(s => {
+                if (!s.rounds || s.rounds.length === 0) return false;
+                const sessionDate = new Date(s.start_time);
+                return sessionDate > cutoffDate;
+            });
 
             // Calculate per-session metrics
             const sessionMetrics = sessions.map((session, idx) => {
@@ -286,9 +292,9 @@
                 };
             });
 
-            // Summary stats
-            const totalCorrect = data.total_correct || sessionMetrics.reduce((a, s) => a + s.correct, 0);
-            const totalRounds = data.total_rounds || sessionMetrics.reduce((a, s) => a + s.total, 0);
+            // Summary stats (calculated from filtered sessions only)
+            const totalCorrect = sessionMetrics.reduce((a, s) => a + s.correct, 0);
+            const totalRounds = sessionMetrics.reduce((a, s) => a + s.total, 0);
             const overallAccuracy = totalRounds > 0 ? (totalCorrect / totalRounds * 100).toFixed(1) : 0;
             const validSpeedSessions = sessionMetrics.filter(s => s.speed !== null);
             const avgSpeed = validSpeedSessions.length > 0
@@ -324,7 +330,7 @@
             renderTrend('speedTrend', speedData.map(s => s.speed), 'speed', false);
 
             // Accuracy by count
-            renderAccuracyByCount(data);
+            renderAccuracyByCount(sessions);
         }
 
         function renderBarChart(containerId, data, field, maxVal, unit, color) {
@@ -388,13 +394,13 @@
             container.className = 'trend ' + (improving ? 'positive' : (Math.abs(change) < 0.1 ? 'neutral' : 'negative'));
         }
 
-        function renderAccuracyByCount(data) {
+        function renderAccuracyByCount(sessions) {
             const container = document.getElementById('countChart');
             container.innerHTML = '';
 
             // Group all rounds by correct_answer count
             const byCount = {};
-            data.sessions.forEach(session => {
+            sessions.forEach(session => {
                 session.rounds.forEach(round => {
                     const count = round.correct_answer;
                     if (!byCount[count]) {
